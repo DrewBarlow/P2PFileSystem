@@ -1,6 +1,7 @@
 from argparse import ArgumentParser, Namespace
 from multiprocessing import Process
 from os import system
+from time import sleep
 from typing import Callable, Iterable, List
 
 SERVER_FILE: str = "./server.py"
@@ -16,6 +17,7 @@ def main() -> None:
     clients: List[Process] = [Process(target=system, args=fmt_args(CLIENT_FILE)) for _ in range(args.num_clients)]
     
     server.start()
+    sleep(1)
     for client in clients:
         client.start()
 
