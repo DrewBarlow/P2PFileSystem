@@ -19,11 +19,11 @@ class P2PFileServer:
     # cryptography failure
     class FailedToEstablishCrypto(Exception): pass
 
-    SERVER_KEY: str = "__SERVER__"
-    CLIENT_KEY: str = "__CLIENT__"
-    READ_KEY: str = "__STREAM_READER__"
-    WRITE_KEY: str = "__STREAM_WRITER__"
-    CRYPTO_KEY: str = "__CRYPTOGRAPHY__"
+    __SERVER_KEY: str = "__SERVER__"
+    __CLIENT_KEY: str = "__CLIENT__"
+    __READ_KEY: str = "__STREAM_READER__"
+    __WRITE_KEY: str = "__STREAM_WRITER__"
+    __CRYPTO_KEY: str = "__CRYPTOGRAPHY__"
 
     def __init__(self, pubkey_path: str, privkey_path: str, /, *, server_ip: str=LOOPBACK, server_port: int=P2P_SERVER_PORT) -> None:
         self._pubkey_path: str = pubkey_path
@@ -81,7 +81,7 @@ class P2PFileServer:
 
             # session_ref_key: laddr_key?raddr_key
             session_ref_key, _ = self.__get_socket_keys(reader, peer_port, is_server=False)
-            if not self.__add_network_entry(session_ref_key, self.CLIENT_KEY, reader, writer, crypto):
+            if not self.__add_network_entry(session_ref_key, self.__CLIENT_KEY, reader, writer, crypto):
                 return False
 
         except ConnectionRefusedError as e:
@@ -95,13 +95,14 @@ class P2PFileServer:
 
         # session_ref_key: raddr_key?laddr_key
         session_ref_key, peer_ip = self.__get_socket_keys(reader, peer_host_port)
-        if not self.__add_network_entry(session_ref_key, self.SERVER_KEY, reader, writer, crypto):
+        if not self.__add_network_entry(session_ref_key, self.__SERVER_KEY, reader, writer, crypto):
             return
 
+        print(f"Client connected from {peer_ip}:{peer_host_port}")
         try:
             await asy.sleep(1)
             await self.connect_to(peer_ip, remote_port=peer_host_port)
-            await self.broadcast(f"{peer_ip}:{peer_host_port}")
+            # await self.broadcast(f"{peer_ip}:{peer_host_port}")
             # broadcast to entire network
         except self.ConnectionAlreadyEstablished: pass
 
@@ -128,9 +129,9 @@ class P2PFileServer:
             self.__network[ref_key] = {}
 
         self.__network[ref_key][srv_cli_key] = {
-            self.READ_KEY: reader,
-            self.WRITE_KEY: writer,
-            self.CRYPTO_KEY: crypto
+            self.__READ_KEY: reader,
+            self.__WRITE_KEY: writer,
+            self.__CRYPTO_KEY: crypto
         }
         return True
 
@@ -209,8 +210,8 @@ class P2PFileServer:
     @wait_for_wrapper()
     async def broadcast(self, msg: str) -> None:
         for session_info in self.__network.values():
-            session_info[self.CLIENT_KEY][self.WRITE_KEY].write(msg.encode())
-            await session_info[self.CLIENT_KEY][self.WRITE_KEY].drain()
+            session_info[self.__CLIENT_KEY][self.__WRITE_KEY].write(msg.encode())
+            await session_info[self.__CLIENT_KEY][self.__WRITE_KEY].drain()
 
         return
 
