@@ -3,6 +3,7 @@ from collections.abc import Coroutine
 from concurrent.futures._base import Future
 from functools import wraps
 from p2pcrypto import P2PCrypto
+from sys import stdout
 from threading import Thread
 from typing import Any, Dict, List, Optional, Tuple, Union
 from util.constants import ACK, IO_SIZE_BYTES, LOOPBACK, P2P_SERVER_PORT
@@ -46,11 +47,12 @@ class P2PFileServer:
 
         task: Future = asy.run_coroutine_threadsafe(self.__start_server(), loop)
 
-        bruh = input(">> ")
-        while bruh != "stop":
-            if bruh == "info":
+        inp = input(">> ")
+        while inp != "stop":
+            if inp == "info":
                 print(self.__network)
-            bruh = input(">> ")
+
+            inp = input(">> ")
 
         loop.stop()
         return
@@ -95,16 +97,25 @@ class P2PFileServer:
 
         # session_ref_key: raddr_key?laddr_key
         session_ref_key, peer_ip = self.__get_socket_keys(reader, peer_host_port)
+        addr: str = f"{peer_ip}:{peer_host_port}"
         if not self.__add_network_entry(session_ref_key, self.__SERVER_KEY, reader, writer, crypto):
+            await self.multicast(addr, exclude=(session_ref_key))
             return
 
         print(f"Client connected from {peer_ip}:{peer_host_port}")
-        try:
-            await asy.sleep(1)
-            await self.connect_to(peer_ip, remote_port=peer_host_port)
-            # await self.broadcast(f"{peer_ip}:{peer_host_port}")
-            # broadcast to entire network
-        except self.ConnectionAlreadyEstablished: pass
+        await asy.sleep(0.01)
+        await self.connect_to(peer_ip, remote_port=peer_host_port)
+
+        def cb(task: asy.Task) -> None:
+            try:
+                ip, port = task.result().decode().split(':')
+                loop: asy.AbstractEventLoop = asy.get_event_loop()
+                asy.run_coroutine_threadsafe(self.connect_to(ip, remote_port=int(port)), loop)
+            except: pass
+            return
+
+        future = asy.ensure_future(reader.read(IO_SIZE_BYTES))
+        future.add_done_callback(cb)
 
         return
 
@@ -208,8 +219,9 @@ class P2PFileServer:
 
     # does not work yet
     @wait_for_wrapper()
-    async def broadcast(self, msg: str) -> None:
-        for session_info in self.__network.values():
+    async def multicast(self, msg: str, /, *, exclude: Optional[Tuple[str]]=None) -> None:
+        for key, session_info in self.__network.items():
+            if key == exclude: continue
             session_info[self.__CLIENT_KEY][self.__WRITE_KEY].write(msg.encode())
             await session_info[self.__CLIENT_KEY][self.__WRITE_KEY].drain()
 
